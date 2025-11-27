@@ -52,7 +52,7 @@ echo "Menghentikan Windows container untuk konfigurasi Tailscale..."
 docker stop windows
 
 WIN_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' windows)
-TAILSCALE_AUTHKEY="YOUR_TAILSCALE_AUTH_KEY_HERE"
+TAILSCALE_AUTHKEY="tskey-auth-k545UGkEty11CNTRL-83NwFWsukL7jhP4eLFkCM7nzDRNHEVM51"
 
 docker run -d \
   --name tailscale \
@@ -61,7 +61,7 @@ docker run -d \
   -e TS_STATE_DIR=/var/lib/tailscale \
   -v /var/lib/tailscale:/var/lib/tailscale \
   -v /dev/net/tun:/dev/net/tun \
-  -e TS_AUTHKEY="$TAILSCALE_AUTHKEY" \
+  -e TS_AUTHKEY="tskey-auth-k545UGkEty11CNTRL-83NwFWsukL7jhP4eLFkCM7nzDRNHEVM51" \
   --network=host \
   tailscale/tailscale \
   /bin/sh -c 'tailscaled & sleep 5; tailscale up --authkey=$TS_AUTHKEY --hostname=windows-vm-host --advertise-routes=${WIN_IP}/32'
