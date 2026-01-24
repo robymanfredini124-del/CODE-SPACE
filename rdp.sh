@@ -1,21 +1,30 @@
 #!/bin/bash
+# ================================================================
+# 🚀 Optimized: Windows 11 (64GB RAM / 16 Cores) for Codespaces
+# ================================================================
 
 set -e
 
+echo "=== 🔧 Menjalankan sebagai root ==="
 if [ "$EUID" -ne 0 ]; then
-  echo "Script ini butuh akses root. Jalankan dengan: sudo bash install-windows11-cloudflare.sh"
+  echo "Script ini butuh akses root. Jalankan dengan: sudo bash rdp.sh"
   exit 1
 fi
 
-apt update -y
-apt install docker-compose -y
+echo
+echo "=== 📦 Update & Install Docker Compose ==="
+apt update -y && apt install docker-compose -y
 
 systemctl enable docker
 systemctl start docker
 
+echo
+echo "=== 📂 Membuat direktori kerja dockercom ==="
 mkdir -p /root/dockercom
 cd /root/dockercom
 
+echo
+echo "=== 🧾 Membuat file windows.yml (Optimized for 64GB) ==="
 cat > windows.yml <<'EOF'
 version: "3.9"
 services:
@@ -26,8 +35,8 @@ services:
       VERSION: "11"
       USERNAME: "MASTER"
       PASSWORD: "admin@123"
-      RAM_SIZE: "16G"
-      CPU_CORES: "8"
+      RAM_SIZE: "60G"
+      CPU_CORES: "16"
     devices:
       - /dev/kvm
       - /dev/net/tun
@@ -41,78 +50,40 @@ services:
       - /tmp/windows-storage:/storage
     restart: always
     stop_grace_period: 2m
-
 EOF
 
-cat windows.yml
-
+echo
+echo "=== 🚀 Menjalankan Windows 11 container ==="
 docker-compose -f windows.yml up -d
 
-echo "Menghentikan Windows container untuk konfigurasi Tailscale..."
-docker stop windows
-
-WIN_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' windows)
-TAILSCALE_AUTHKEY="tskey-auth-k545UGkEty11CNTRL-83NwFWsukL7jhP4eLFkCM7nzDRNHEVM51"
-
-docker run -d \
-  --name tailscale \
-  --cap-add=NET_ADMIN \
-  --device=/dev/net/tun \
-  -e TS_STATE_DIR=/var/lib/tailscale \
-  -v /var/lib/tailscale:/var/lib/tailscale \
-  -v /dev/net/tun:/dev/net/tun \
-  -e TS_AUTHKEY="tskey-auth-k545UGkEty11CNTRL-83NwFWsukL7jhP4eLFkCM7nzDRNHEVM51" \
-  --network=host \
-  tailscale/tailscale \
-  /bin/sh -c 'tailscaled & sleep 5; tailscale up --authkey=$TS_AUTHKEY --hostname=windows-vm-host --advertise-routes=${WIN_IP}/32'
-  
-docker start windows
-
+echo
+echo "=== ☁️ Instalasi Cloudflare Tunnel ==="
 if [ ! -f "/usr/local/bin/cloudflared" ]; then
   wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
   chmod +x /usr/local/bin/cloudflared
 fi
 
+echo
+echo "=== 🌍 Membuat tunnel publik ==="
+# Clear old logs
+> /var/log/cloudflared_web.log
+> /var/log/cloudflared_rdp.log
+
 nohup cloudflared tunnel --url http://localhost:8006 > /var/log/cloudflared_web.log 2>&1 &
 nohup cloudflared tunnel --url tcp://localhost:3389 > /var/log/cloudflared_rdp.log 2>&1 &
-sleep 6
+
+echo "Waiting for Cloudflare links..."
+sleep 10
 
 CF_WEB=$(grep -o "https://[a-zA-Z0-9.-]*\.trycloudflare\.com" /var/log/cloudflared_web.log | head -n 1)
 CF_RDP=$(grep -o "tcp://[a-zA-Z0-9.-]*\.trycloudflare\.com:[0-9]*" /var/log/cloudflared_rdp.log | head -n 1)
 
-echo
 echo "=============================================="
-echo "🎉 Instalasi Selesai!"
-echo
-if [ -n "$CF_WEB" ]; then
-  echo "🌍 Web Console (NoVNC / UI):"
-  echo "    ${CF_WEB}"
-else
-  echo "⚠️ Tidak menemukan link web Cloudflare (port 8006)"
-  echo "    Cek log: tail -f /var/log/cloudflared_web.log"
-fi
-
-if [ -n "$CF_RDP" ]; then
-  echo
-  echo "🖥️  Remote Desktop (RDP) melalui Cloudflare:"
-  echo "    ${CF_RDP}"
-else
-  echo "⚠️ Tidak menemukan link RDP Cloudflare (port 3389)"
-  echo "    Cek log: tail -f /var/log/cloudflared_rdp.log"
-fi
-
-echo
-echo "🔑 Username: MASTER"
-echo "🔒 Password: admin@123"
-echo
-echo "Untuk melihat status container:"
-echo "  docker ps"
-echo
-echo "Untuk menghentikan VM:"
-echo "  docker stop windows"
-echo
-echo "Untuk melihat log Windows:"
-echo "  docker logs -f windows"
+echo "🌍 Web Console: ${CF_WEB:-'Link not ready, check logs'}"
+echo "🖥️  RDP Address: ${CF_RDP:-'Link not ready, check logs'}"
+echo "=============================================="
+echo "🔑 User: MASTER | Pass: admin@123"
+echo "=============================================="echo "  docker logs -f windows"
 echo
 echo "Untuk melihat link Cloudflare:"
 echo "  grep 'trycloudflare' /var/log/cloudflared_*.log"
